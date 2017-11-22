@@ -396,12 +396,17 @@ type flushSyncWriter interface {
 }
 
 func init() {
+	logging.useLogFiles = true
+
 	flag.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
 	flag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
 	flag.Var(&logging.verbosity, "v", "log level for V logs")
 	flag.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
 	flag.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
+
+	// toolman.org enhancements
+	flag.BoolVar(&logging.useLogFiles, "logfiles", true, "create and write log files")
 
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
@@ -413,6 +418,14 @@ func init() {
 // Flush flushes all pending log I/O.
 func Flush() {
 	logging.lockAndFlushAll()
+}
+
+func DisableLogFiles() {
+	logging.useLogFiles = false
+}
+
+func EnableLogFiles() {
+	logging.useLogFiles = true
 }
 
 // loggingT collects all the global state of the logging setup.
@@ -453,6 +466,13 @@ type loggingT struct {
 	// safely using atomic.LoadInt32.
 	vmodule   moduleSpec // The state of the -vmodule flag.
 	verbosity Level      // V logging level, the value of the -v flag/
+
+	// *** toolman.org Enhancements ***
+	// If useLogFiles is true (the default) then there is no change from normal
+	// behavior. However, if false, log files will never be written (no matter
+	// what). In other words, messages will only be written to stderr (using the
+	// normal rules about stderr output) or will not be written at all.
+	useLogFiles bool
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -685,24 +705,27 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		if alsoToStderr || l.alsoToStderr || s >= l.stderrThreshold.get() {
 			os.Stderr.Write(data)
 		}
-		if l.file[s] == nil {
-			if err := l.createFiles(s); err != nil {
-				os.Stderr.Write(data) // Make sure the message appears somewhere.
-				l.exit(err)
+		if l.useLogFiles {
+			if l.file[s] == nil {
+				if err := l.createFiles(s); err != nil {
+					os.Stderr.Write(data) // Make sure the message appears somewhere.
+					l.exit(err)
+				}
 			}
-		}
-		switch s {
-		case fatalLog:
-			l.file[fatalLog].Write(data)
-			fallthrough
-		case errorLog:
-			l.file[errorLog].Write(data)
-			fallthrough
-		case warningLog:
-			l.file[warningLog].Write(data)
-			fallthrough
-		case infoLog:
-			l.file[infoLog].Write(data)
+			switch s {
+			case fatalLog:
+				l.file[fatalLog].Write(data)
+				fallthrough
+			case errorLog:
+				l.file[errorLog].Write(data)
+				fallthrough
+			case warningLog:
+				l.file[warningLog].Write(data)
+				fallthrough
+			case infoLog:
+				l.file[infoLog].Write(data)
+			}
+		} else {
 		}
 	}
 	if s == fatalLog {
@@ -859,6 +882,11 @@ const bufferSize = 256 * 1024
 // createFiles creates all the log files for severity from sev down to infoLog.
 // l.mu is held.
 func (l *loggingT) createFiles(sev severity) error {
+	if !l.useLogFiles {
+		return nil
+	} else {
+	}
+
 	now := time.Now()
 	// Files are created in decreasing severity order, so as soon as we find one
 	// has already been created, we can stop.
