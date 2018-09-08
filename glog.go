@@ -407,6 +407,7 @@ func init() {
 
 	// toolman.org enhancements
 	flag.BoolVar(&logging.useLogFiles, "logfiles", true, "create and write log files")
+	flag.DurationVar(&logging.flushInterval, "log_flush_interval", defaultFlushInterval, "interval at which log files will be flushed")
 
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
@@ -467,12 +468,19 @@ type loggingT struct {
 	vmodule   moduleSpec // The state of the -vmodule flag.
 	verbosity Level      // V logging level, the value of the -v flag/
 
-	// *** toolman.org Enhancements ***
+	// *****  ------------------------  *****
+	// *****  toolman.org Enhancements  *****
+	// *****  ------------------------  *****
+	//
 	// If useLogFiles is true (the default) then there is no change from normal
 	// behavior. However, if false, log files will never be written (no matter
 	// what). In other words, messages will only be written to stderr (using the
 	// normal rules about stderr output) or will not be written at all.
 	useLogFiles bool
+
+	// flushInterval allows the caller to override the default (hardcoded) flush
+	// interval of 30s.
+	flushInterval time.Duration
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -903,13 +911,35 @@ func (l *loggingT) createFiles(sev severity) error {
 	return nil
 }
 
-const flushInterval = 30 * time.Second
+const defaultFlushInterval = 30 * time.Second
 
 // flushDaemon periodically flushes the log file buffers.
 func (l *loggingT) flushDaemon() {
-	for _ = range time.NewTicker(flushInterval).C {
-		l.lockAndFlushAll()
+	lfi := l.flushInterval
+	if ds := os.Getenv("LOG_FLUSH_INTERVAL"); ds != "" {
+		d, err := time.ParseDuration(ds)
+		if err != nil {
+			os.Stderr.Write([]byte("WARNING: Cannot parse $LOG_FLUSH_INTERVAL value \"" + ds + "\": " + err.Error()))
+			os.Stderr.Sync()
+			os.Setenv("LOG_FLUSH_INTERVAL", "")
+		} else {
+			lfi = d
+			l.flushInterval = lfi
+		}
 	}
+
+	tick := time.NewTicker(lfi)
+
+	for _ = range tick.C {
+		l.lockAndFlushAll()
+		if lfi != l.flushInterval {
+			Infof("Flush interval adjusted: %v -> %v", lfi, l.flushInterval)
+			break
+		}
+	}
+
+	tick.Stop()
+	l.flushDaemon()
 }
 
 // lockAndFlushAll is like flushAll but locks l.mu first.
