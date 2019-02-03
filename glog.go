@@ -631,7 +631,7 @@ func (l *loggingT) formatHeader(s severity, file string, line int) *buffer {
 	buf.tmp[0] = ':'
 	n := buf.someDigits(1, line)
 	buf.tmp[n+1] = ']'
-	buf.tmp[n+2] = ' '
+	buf.tmp[n+2] = ' ' // TODO(tep): Make padding auto-adjust based on widest header seen yet.
 	buf.Write(buf.tmp[:n+3])
 	return buf
 }
