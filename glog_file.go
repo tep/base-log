@@ -74,13 +74,11 @@ func init() {
 
 // Dir returns the current logging directory or, if logging has not yet
 // commenced, the most likely candidate. If no likely candidate can be found,
-// an empty string is returned.
+// os.TempDir() is returned.
 func Dir() string {
 	if currLogDir != nil {
 		return *currLogDir
 	}
-
-	onceLogDirs.Do(createLogDirs)
 
 	for _, dir := range logDirs {
 		if isDir(dir) && isWritable(dir) {
@@ -88,7 +86,7 @@ func Dir() string {
 		}
 	}
 
-	return ""
+	return os.TempDir()
 }
 
 func isDir(dir string) bool {
