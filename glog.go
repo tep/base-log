@@ -37,7 +37,7 @@
 //
 // By default, all log statements write to files in a temporary directory.
 // This package provides several flags that modify this behavior.
-// As a result, flag.Parse must be called before any logging is done.
+// As a result, pflag.Parse must be called before any logging is done.
 //
 //	-logtostderr=false
 //		Logs are written to standard error instead of to files.
@@ -74,10 +74,8 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
-	stdLog "log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -86,11 +84,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	stdLog "log"
+
+	"github.com/spf13/pflag"
 )
 
 // severity identifies the sort of log: info, warning etc. It also implements
-// the flag.Value interface. The -stderrthreshold flag is of type severity and
-// should be modified only through the flag.Value interface. The values match
+// the pflag.Value interface. The -stderrthreshold flag is of type severity and
+// should be modified only through the pflag.Value interface. The values match
 // the corresponding constants in C++.
 type severity int32 // sync/atomic int32
 
@@ -124,17 +126,22 @@ func (s *severity) set(val severity) {
 	atomic.StoreInt32((*int32)(s), int32(val))
 }
 
-// String is part of the flag.Value interface.
+// Type contributes to the pflag.Value interface
+func (s *severity) Type() string {
+	return "log severity"
+}
+
+// String is part of the pflag.Value interface.
 func (s *severity) String() string {
 	return strconv.FormatInt(int64(*s), 10)
 }
 
-// Get is part of the flag.Value interface.
+// Get is part of the pflag.Value interface.
 func (s *severity) Get() interface{} {
 	return *s
 }
 
-// Set is part of the flag.Value interface.
+// Set is part of the pflag.Value interface.
 func (s *severity) Set(value string) error {
 	var threshold severity
 	// Is it a known name?
@@ -199,8 +206,8 @@ var severityStats = [numSeverity]*OutputStats{
 // Level is treated as a sync/atomic int32.
 
 // Level specifies a level of verbosity for V logs. *Level implements
-// flag.Value; the -v flag is of type Level and should be modified
-// only through the flag.Value interface.
+// pflag.Value; the -v flag is of type Level and should be modified
+// only through the pflag.Value interface.
 type Level int32
 
 // get returns the value of the Level.
@@ -213,17 +220,22 @@ func (l *Level) set(val Level) {
 	atomic.StoreInt32((*int32)(l), int32(val))
 }
 
-// String is part of the flag.Value interface.
+// Type contributes to the pflag.Value interface
+func (l *Level) Type() string {
+	return "log level"
+}
+
+// String is part of the pflag.Value interface.
 func (l *Level) String() string {
 	return strconv.FormatInt(int64(*l), 10)
 }
 
-// Get is part of the flag.Value interface.
+// Get is part of the pflag.Value interface.
 func (l *Level) Get() interface{} {
 	return *l
 }
 
-// Set is part of the flag.Value interface.
+// Set is part of the pflag.Value interface.
 func (l *Level) Set(value string) error {
 	v, err := strconv.Atoi(value)
 	if err != nil {
@@ -256,6 +268,11 @@ func (m *modulePat) match(file string) bool {
 	}
 	match, _ := filepath.Match(m.pattern, file)
 	return match
+}
+
+// Type contributes to the pflag.Value interface
+func (m *moduleSpec) Type() string {
+	return "vmodule settings"
 }
 
 func (m *moduleSpec) String() string {
@@ -343,6 +360,11 @@ func (t *traceLocation) match(file string, line int) bool {
 	return t.file == file
 }
 
+// Type contributes to the pflag.Value interface
+func (t *traceLocation) Type() string {
+	return "log_backtrace_at settings"
+}
+
 func (t *traceLocation) String() string {
 	// Lock because the type is not atomic. TODO: clean this up.
 	logging.mu.Lock()
@@ -398,16 +420,16 @@ type flushSyncWriter interface {
 func init() {
 	logging.useLogFiles = true
 
-	flag.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
-	flag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
-	flag.Var(&logging.verbosity, "v", "log level for V logs")
-	flag.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
-	flag.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
-	flag.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
+	pflag.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
+	pflag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	pflag.Var(&logging.verbosity, "v", "log level for V logs")
+	pflag.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
+	pflag.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
+	pflag.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
 
 	// toolman.org enhancements
-	flag.BoolVar(&logging.useLogFiles, "logfiles", true, "create and write log files")
-	flag.DurationVar(&logging.flushInterval, "log_flush_interval", defaultFlushInterval, "interval at which log files will be flushed")
+	pflag.BoolVar(&logging.useLogFiles, "logfiles", true, "create and write log files")
+	pflag.DurationVar(&logging.flushInterval, "log_flush_interval", defaultFlushInterval, "interval at which log files will be flushed")
 
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
@@ -431,7 +453,7 @@ func EnableLogFiles() {
 
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
-	// Boolean flags. Not handled atomically because the flag.Value interface
+	// Boolean flags. Not handled atomically because the pflag.Value interface
 	// does not let us avoid the =true, and that shorthand is necessary for
 	// compatibility. TODO: does this matter enough to fix? Seems unlikely.
 	toStderr     bool // The -logtostderr flag.
@@ -704,7 +726,7 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		}
 	}
 	data := buf.Bytes()
-	if !flag.Parsed() {
+	if !pflag.Parsed() {
 		os.Stderr.Write([]byte("ERROR: logging before flag.Parse: "))
 		os.Stderr.Write(data)
 	} else if l.toStderr {

@@ -20,7 +20,6 @@ package log
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/user"
@@ -28,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/spf13/pflag"
 )
 
 // MaxSize is the maximum size of a log file in bytes.
@@ -38,7 +39,7 @@ var logDirs []string
 
 // If non-empty, overrides the choice of directory in which to write logs.
 // See createLogDirs for the full list of possible destinations.
-var logDir = flag.String("log_dir", "", "If non-empty, write log files in this directory")
+var logDir = pflag.String("log_dir", "", "If non-empty, write log files in this directory")
 
 func createLogDirs() {
 	if *logDir != "" {

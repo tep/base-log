@@ -18,15 +18,24 @@ package log
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
-	stdLog "log"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	stdLog "log"
+
+	"github.com/spf13/pflag"
 )
+
+func init() {
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+	pflag.Parse()
+}
 
 // Test that shortHostname works as advertised.
 func TestShortHostname(t *testing.T) {
