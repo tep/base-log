@@ -52,6 +52,8 @@ var (
 	program  = filepath.Base(os.Args[0])
 	host     = "unknownhost"
 	userName = "unknownuser"
+
+	currLogDir *string
 )
 
 func init() {
@@ -67,6 +69,32 @@ func init() {
 
 	// Sanitize userName since it may contain filepath separators on Windows.
 	userName = strings.Replace(userName, `\`, "_", -1)
+}
+
+// Dir returns the current logging directory or, if logging has not yet
+// commenced, the most likely candidate. If no likely candidate can be found,
+// an empty string is returned.
+func Dir() string {
+	if currLogDir != nil {
+		return *currLogDir
+	}
+
+	onceLogDirs.Do(createLogDirs)
+
+	for _, dir := range logDirs {
+		if isDir(dir) && isWritable(dir) {
+			return dir
+		}
+	}
+
+	return ""
+}
+
+func isDir(dir string) bool {
+	if fi, _ := os.Stat(dir); fi != nil {
+		return fi.IsDir()
+	}
+	return false
 }
 
 // shortHostname returns its argument, truncating at the first period.
@@ -113,6 +141,7 @@ func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 		fname := filepath.Join(dir, name)
 		f, err := os.Create(fname)
 		if err == nil {
+			currLogDir = &dir
 			symlink := filepath.Join(dir, link)
 			os.Remove(symlink)        // ignore err
 			os.Symlink(name, symlink) // ignore err
