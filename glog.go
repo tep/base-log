@@ -422,7 +422,7 @@ func init() {
 
 	pflag.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
 	pflag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
-	pflag.Var(&logging.verbosity, "v", "log level for V logs")
+	pflag.VarP(&logging.verbosity, "v", "v", "log level for V logs")
 	pflag.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
 	pflag.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	pflag.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
