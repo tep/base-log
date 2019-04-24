@@ -417,25 +417,48 @@ type flushSyncWriter interface {
 	io.Writer
 }
 
+// TODO: Setting HideFlags to false doesn't actually expose them; fix it.
+
+// HideFlags indicates whether flags defined by this package should be hidden
+// from default Usage messages. Note that this value must be set prior to flag
+// definition (i.e. in an init function)
+var HideFlags = true
+
+const defaultFlushInterval = 30 * time.Second
+
 func init() {
 	logging.useLogFiles = true
 
-	pflag.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
-	pflag.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
-	pflag.VarP(&logging.verbosity, "v", "v", "log level for V logs")
-	pflag.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
-	pflag.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
-	pflag.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
+	fs := pflag.NewFlagSet("toolman.org/base/log", pflag.ExitOnError)
+
+	fs.BoolVar(&logging.toStderr, "logtostderr", false, "log to standard error instead of files")
+	fs.BoolVar(&logging.alsoToStderr, "alsologtostderr", false, "log to standard error as well as files")
+	fs.VarP(&logging.verbosity, "v", "v", "log level for V logs")
+	fs.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
+	fs.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
+	fs.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
 
 	// toolman.org enhancements
-	pflag.BoolVar(&logging.useLogFiles, "logfiles", true, "create and write log files")
-	pflag.DurationVar(&logging.flushInterval, "log_flush_interval", defaultFlushInterval, "interval at which log files will be flushed")
+	fs.BoolVar(&logging.useLogFiles, "logfiles", true, "create and write log files")
+	fs.DurationVar(&logging.flushInterval, "log_flush_interval", defaultFlushInterval, "interval at which log files will be flushed")
+
+	if HideFlags {
+		fs.VisitAll(func(f *pflag.Flag) {
+			f.Hidden = true
+		})
+	}
+
+	pflag.CommandLine.AddFlagSet(fs)
 
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
 
 	logging.setVState(0, nil, false)
-	go logging.flushDaemon()
+
+	logging.flusher.start(logging.flushInterval)
+
+	// TODO: REMOVE XXX
+	// go logging.flushDaemon()
 }
 
 // Flush flushes all pending log I/O.
@@ -449,6 +472,10 @@ func DisableLogFiles() {
 
 func EnableLogFiles() {
 	logging.useLogFiles = true
+}
+
+func UpdateFlushInterval(d time.Duration) {
+	logging.flusher.updateFlushInterval(d)
 }
 
 // loggingT collects all the global state of the logging setup.
@@ -499,6 +526,8 @@ type loggingT struct {
 	// what). In other words, messages will only be written to stderr (using the
 	// normal rules about stderr output) or will not be written at all.
 	useLogFiles bool
+
+	flusher flusher
 
 	// flushInterval allows the caller to override the default (hardcoded) flush
 	// interval of 30s.
@@ -933,8 +962,7 @@ func (l *loggingT) createFiles(sev severity) error {
 	return nil
 }
 
-const defaultFlushInterval = 30 * time.Second
-
+/* TODO: REMOVE XXX
 // flushDaemon periodically flushes the log file buffers.
 func (l *loggingT) flushDaemon() {
 	lfi := l.flushInterval
@@ -963,6 +991,8 @@ func (l *loggingT) flushDaemon() {
 	tick.Stop()
 	l.flushDaemon()
 }
+
+*/
 
 // lockAndFlushAll is like flushAll but locks l.mu first.
 func (l *loggingT) lockAndFlushAll() {

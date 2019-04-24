@@ -70,6 +70,14 @@ func init() {
 
 	// Sanitize userName since it may contain filepath separators on Windows.
 	userName = strings.Replace(userName, `\`, "_", -1)
+
+	if HideFlags {
+		pflag.VisitAll(func(f *pflag.Flag) {
+			if f.Name == "log_dir" {
+				f.Hidden = true
+			}
+		})
+	}
 }
 
 // Dir returns the current logging directory or, if logging has not yet
