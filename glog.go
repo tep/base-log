@@ -68,7 +68,7 @@
 //			-vmodule=gopher*=3
 //		sets the V level to 3 in all Go files whose names begin "gopher".
 //
-package log // import "toolman.org/base/log"
+package log // import "toolman.org/base/log/v2"
 
 import (
 	"bufio"
